@@ -4,13 +4,13 @@
 #include <libutils/timer.h>
 
 #include <cassert>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
-#include <ctime>
-#include <cstdlib>
 
 template<typename T>
 std::string to_string(T value) {
@@ -33,7 +33,7 @@ int main() {
     if (!ocl_init())
         throw std::runtime_error("Can't init OpenCL driver!");
 
-    // find device and platform 
+    // find device and platform
     cl_uint platformCount = 0;
     OCL_SAFE_CALL(clGetPlatformIDs(0, nullptr, &platformCount));
     std::vector<cl_platform_id> platforms(platformCount);
@@ -44,39 +44,39 @@ int main() {
     cl_platform_id selectedPlatform;
     cl_device_id selectedDevice;
     for (int platformIndex = 0; platformIndex < platformCount; ++platformIndex) {
-      cl_platform_id platform = platforms[platformIndex];
-      cl_uint devicesCount = 0;
-      OCL_SAFE_CALL(clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, nullptr, &devicesCount));
-      std::vector<cl_device_id> devices(devicesCount);
-      OCL_SAFE_CALL(clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, devicesCount, devices.data(), nullptr));
-      for (int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex) {
-        cl_device_id device = devices[deviceIndex];
-        cl_device_type deviceType;
-        OCL_SAFE_CALL(clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(deviceType), &deviceType, nullptr));
-        
-        if (deviceType & CL_DEVICE_TYPE_GPU) {
-          gpuDeviceSelected = true;
-          anyDeviceSelected = true;
-          selectedPlatform = platform;
-          selectedDevice = device;
-          break;
+        cl_platform_id platform = platforms[platformIndex];
+        cl_uint devicesCount = 0;
+        OCL_SAFE_CALL(clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, nullptr, &devicesCount));
+        std::vector<cl_device_id> devices(devicesCount);
+        OCL_SAFE_CALL(clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, devicesCount, devices.data(), nullptr));
+        for (int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex) {
+            cl_device_id device = devices[deviceIndex];
+            cl_device_type deviceType;
+            OCL_SAFE_CALL(clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(deviceType), &deviceType, nullptr));
+
+            if (deviceType & CL_DEVICE_TYPE_GPU) {
+                gpuDeviceSelected = true;
+                anyDeviceSelected = true;
+                selectedPlatform = platform;
+                selectedDevice = device;
+                break;
+            }
+            if (deviceType & CL_DEVICE_TYPE_CPU) {
+                anyDeviceSelected = true;
+                selectedPlatform = platform;
+                selectedDevice = device;
+            }
         }
-        if (deviceType & CL_DEVICE_TYPE_CPU) {
-          anyDeviceSelected = true;
-          selectedPlatform = platform;
-          selectedDevice = device;
-        }
-      }
-      if (gpuDeviceSelected)
-        break;
+        if (gpuDeviceSelected)
+            break;
     }
     if (!anyDeviceSelected)
-      throw std::runtime_error("No device found");
+        throw std::runtime_error("No device found");
 
     // create context
     cl_int errcode;
-    cl_context_properties contextProperties[] {CL_CONTEXT_PLATFORM, cl_context_properties(selectedPlatform), 0};
-    cl_device_id devices[] {selectedDevice};
+    cl_context_properties contextProperties[]{CL_CONTEXT_PLATFORM, cl_context_properties(selectedPlatform), 0};
+    cl_device_id devices[]{selectedDevice};
     cl_context context = clCreateContext(contextProperties, 1, devices, nullptr, nullptr, &errcode);
     OCL_SAFE_CALL(errcode);
 
@@ -84,16 +84,16 @@ int main() {
     cl_command_queue commandQueue = clCreateCommandQueue(context, selectedDevice, 0, &errcode);
     OCL_SAFE_CALL(errcode);
 
-    // generate data 
+    // generate data
     constexpr unsigned int n = 100 * 1000 * 1000;
     bool *as, *bs, *cs;
-    as = (bool *)malloc(n);
-    bs = (bool *)malloc(n);
-    cs = (bool *)malloc(n);
+    as = (bool *) malloc(n);
+    bs = (bool *) malloc(n);
+    cs = (bool *) malloc(n);
     srand(time(0));
     for (int i = 0; i < n; i++) {
-      as[i] = rand() % 2 == 0;
-      bs[i] = rand() % 2 == 0;
+        as[i] = rand() % 2 == 0;
+        bs[i] = rand() % 2 == 0;
     }
 
     // create buffers
@@ -116,8 +116,8 @@ int main() {
     }
 
     // create program with kernerl
-    const char* kernelSourcesChars = kernelSources.c_str();
-    size_t length[] {kernelSources.size()};
+    const char *kernelSourcesChars = kernelSources.c_str();
+    size_t length[]{kernelSources.size()};
     cl_program program = clCreateProgramWithSource(context, 1, &kernelSourcesChars, length, &errcode);
 
     // build program
@@ -146,19 +146,20 @@ int main() {
         clSetKernelArg(kernel, i++, sizeof(unsigned int), &n);
     }
 
-    // run calculating 
+    // run calculating
     {
         size_t workGroupSize = 128;
         size_t globalWorkSize = (n + workGroupSize - 1) / workGroupSize * workGroupSize;
         cl_event event;
         for (unsigned int i = 0; i < 20; ++i) {
-            OCL_SAFE_CALL(clEnqueueNDRangeKernel(commandQueue, kernel, 1, nullptr, &globalWorkSize, &workGroupSize, 0, nullptr, &event));
+            OCL_SAFE_CALL(clEnqueueNDRangeKernel(commandQueue, kernel, 1, nullptr, &globalWorkSize, &workGroupSize, 0,
+                                                 nullptr, &event));
             OCL_SAFE_CALL(clWaitForEvents(1, &event));
         }
     }
 
     // get results from VRAM
-     {
+    {
         cl_event event;
         for (unsigned int i = 0; i < 20; ++i) {
             OCL_SAFE_CALL(clEnqueueReadBuffer(commandQueue, c_gpu, CL_TRUE, 0, bufferSize, cs, 0, nullptr, &event));
